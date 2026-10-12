@@ -510,7 +510,7 @@ code,
 .menu-toggle[aria-expanded="true"] .icon-open {
   display: none;
 }
-@media (max-width: 72rem) {
+@media (max-width: 78rem) {
   .menu-toggle {
     display: inline-flex;
   }
@@ -1044,12 +1044,20 @@ code,
   color: var(--color-accent);
   min-height: 1.5em;
 }
+.copy-fallback {
+  display: block;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
 
 /* ---------- Tokenomics ---------- */
 .tokenomics-layout {
   display: grid;
   gap: var(--space-6);
   align-items: center;
+}
+.tokenomics-layout[hidden] {
+  display: none;
 }
 @media (min-width: 56rem) {
   .tokenomics-layout {

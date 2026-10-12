@@ -52,12 +52,15 @@ elements and the lab's experiment button; neither is used for static body text b
 slice colours live in `DONUT_COLORS` in `site/app.js` and follow the same order (lime, pink, chalk,
 green-600, lime-300, pink-400).
 
-Measured contrast pairs (WCAG 2.x ratio, computed from rendered `getComputedStyle` values in
-Chromium, see `artifacts/validation.md`): chalk text on page bg 13.56:1; muted text on page bg
+Solid-color contrast pairs from the accepted initial design review (WCAG 2.x ratio, computed
+from CSS values in Chromium): chalk text on page bg 13.56:1; muted text on page bg
 10.35:1; faint text on surface 5.03:1; lime on surface 10.62:1; pink on surface 4.17:1 (used only at
 display sizes ≥ 20px bold, where 3:1 applies); ink on lime 16.8:1; ink on pink 6.6:1; ink on chalk
 17.53:1; lime focus ring on page bg 13:1. The ring sits 3px outside the control, so it is judged
-against the surrounding background, never against a lime fill.
+against the surrounding background, never against a lime fill. These are solid-color ratios,
+not measurements of every composited grain/gradient pixel. The revision rechecked lime on the
+contract card (10.62:1) and ink on the primary fill (16.80:1); see `artifacts/validation.md` for
+scoped coverage and limitations.
 
 ## Typography
 
@@ -102,8 +105,8 @@ one step (8–12px); between groups use at least double (`--space-5`/`--space-6`
 - Breakpoints are content-driven and written in rem: 26rem (brand text shrinks and the `$OOPS` span
   hides), 30rem, 40rem (stats 1 → 2 columns; hero stickers move inline below 40rem), 48rem (story
   beats 1 → 3 columns), 56rem (hero becomes a 1.2fr/1fr grid and fills the viewport height; buy,
-  tokenomics, generator and lab become two columns), 60rem, 72rem (mobile menu toggle below, inline
-  nav links above).
+  tokenomics, generator and lab become two columns), 60rem, 78rem (mobile menu through this width,
+  inline nav links above it). The content container remains 72rem.
 - Meme wall: `repeat(auto-fill, minmax(min(100%, 16rem), 1fr))`.
 - All anchored sections carry `scroll-margin-top: calc(var(--nav-height) + var(--space-4))`
   (`--nav-height: 4rem`).
@@ -112,8 +115,9 @@ one step (8–12px); between groups use at least double (`--space-5`/`--space-6`
 - Logical properties (`inset-inline`, `margin-inline`, `padding-inline`) are used for
   direction-dependent spacing.
 
-Observed in the browser at 320, 390, 1180 and 1440 CSS px with no horizontal scroll. Widths between
-those points were not individually inspected.
+Revision measurements at 320, 360, 375, 390, 768, 1152, 1153, 1180, 1248, 1249, 1280, 1440 and
+1920 CSS px found no horizontal scroll. The nav keeps its full brand at the revised breakpoint;
+the desktop Buy label fits at 1249px and above. Other widths were not individually inspected.
 
 ## Elevation & Depth
 
@@ -154,8 +158,11 @@ All in `site/styles.css`; behaviour in `site/app.js`.
 - **Stickers `.sticker`** (pink default, `.sticker-lime`, `.sticker-chalk`), uppercase labels with
   `--tilt`. Decorative: hero stickers are `aria-hidden`.
 - **Cards `.card`** and inverted `.card-chalk`; **stat tiles `.stat`** with `.stat-label`,
-  `.stat-value` (`.loud` for pink) and `.stat-foot`.
-- **Sticky nav `.site-nav`**: brand, `.nav-links`, `.nav-actions`. Below 72rem the links collapse
+  `.stat-value` (`.loud` for pink) and `.stat-foot`. Price, market cap, volume and liquidity share
+  the 900ms `animateNumber` interpolation; price uses `renderPrice` for compact notation and a
+  full-price accessible label. Reduced motion updates immediately. New updates cancel pending
+  frames, including when a failed feed clears the values.
+- **Sticky nav `.site-nav`**: brand, `.nav-links`, `.nav-actions`. Through 78rem the links collapse
   behind `.menu-toggle` (`aria-expanded`, `aria-controls`, Escape closes, link click closes). A
   `.skip-link` precedes it.
 - **Marquee `.marquee-wrap > .marquee > .marquee-track`**: duplicated spans, 28s linear loop,
@@ -169,16 +176,25 @@ All in `site/styles.css`; behaviour in `site/app.js`.
 - **Tabs `.steps-tabs` / `.step-tab` / `.step-panel`**: ARIA tabs with roving tabindex, arrow keys,
   Home/End, and Next/Previous buttons (`initSteps`).
 - **Contract box `.contract-box`**: `<code class="contract-address">` plus `#copy-contract`;
-  status in `#copy-status` (polite); clipboard failure falls back to selecting the text.
+  status in `#copy-status` (polite). Shared `copyText` failure handling renders and selects the
+  requested value in a `.copy-fallback` code element inside the supplied status. It wraps long
+  values and stays selectable; site-link copying uses the same pattern in `#share-status`.
 - **Donut `.donut`**: SVG circles with `stroke-dasharray` animated on insert, `.legend` rows and a
-  `.facts` definition list (`renderTokenomics`). When the feed has no tokenomics the layout is
-  replaced by one card linking to the chart.
+  `.facts` definition list (`renderTokenomics`). When tokenomics are unavailable the layout is
+  hidden and `#tokenomics-fallback` shows one card linking to the chart. Its DOM is preserved for
+  recovery. Each refresh replaces `.donut-segment` circles, legend rows and facts without
+  accumulating old segments.
 - **Meme wall `.meme-grid > figure.meme-card`**: `.meme-frame` with inline SVG from `TEMPLATES`
   (8 compositions) and a "Download PNG" button that embeds the logo and fonts as data URLs and
   rasterises through an offscreen canvas (`downloadSvgAsPng`).
 - **Meme generator `.generator`**: radio `.template-picker` (`:has(:checked)` styling, visible
   focus via `:has(:focus-visible)`), two labelled text inputs (local only, nothing is sent), live
-  SVG preview in `#gen-frame`, download and shuffle buttons, status in `#gen-status`.
+  SVG preview in `#gen-frame`, download and shuffle buttons, status in `#gen-status`. Each input
+  accepts 60 characters. `caption` measures SVG text, wraps overlong words, keeps every line and
+  reduces the font size to fit its 1200px artboard. Caption bands are y=24–230 at the top,
+  y=1030–1176 at the bottom, or y=1080–1176 beneath the Peer review labels; horizontal inset is
+  50px including outline. Preview is remeasured after fonts load; export uses the same geometry
+  and embeds the fonts and logo. These artboard font sizes are separate from the six UI sizes.
 - **Community `.community`**: X search link (replaced by the official account only if the feed
   provides `x`), three share buttons opening prefilled X intents, copy-link button, status line.
 - **Footer `.site-footer`**: link list and the required attribution line.
@@ -186,7 +202,10 @@ All in `site/styles.css`; behaviour in `site/app.js`.
 
 Loading/empty states: stat values start as "—" and show "see chart" when a number is null; the
 status line reports the last update time or a feed failure; tokenomics has the no-data card
-described above.
+described above. `renderCoin` applies links, stats and tokenomics on initial load and every
+30-second poll. A failed request to both data sources clears numbers and discloses unavailability;
+recovery restores all feed-driven surfaces. Repeated social-link updates reuse one Telegram
+element and restore the X-search fallback when an account is absent.
 
 ## Do's and Don'ts
 

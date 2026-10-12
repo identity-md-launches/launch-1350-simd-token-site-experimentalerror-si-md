@@ -112,6 +112,8 @@ function formatSupply(n) {
 
 /** @type {WeakMap<HTMLElement, number>} */
 const currentValues = new WeakMap();
+/** @type {WeakMap<HTMLElement, number>} */
+const numberFrames = new WeakMap();
 
 /**
  * Tween the displayed value of an element from its last value to `target`.
@@ -119,29 +121,39 @@ const currentValues = new WeakMap();
  * @param {number | null | undefined} target
  * @param {(n: number) => string} fmt
  * @param {string} fallback
+ * @param {(n: number) => void} [render]
  */
-function animateNumber(el, target, fmt, fallback) {
+function animateNumber(el, target, fmt, fallback, render = (n) => { el.textContent = fmt(n); }) {
+  const pending = numberFrames.get(el);
+  if (pending !== undefined) cancelAnimationFrame(pending);
+  numberFrames.delete(el);
   if (target === null || target === undefined || !Number.isFinite(target)) {
     el.textContent = fallback;
+    el.removeAttribute("aria-label");
     currentValues.delete(el);
     return;
   }
   const from = currentValues.get(el);
-  currentValues.set(el, target);
+  /** @param {number} n */
+  const show = (n) => {
+    currentValues.set(el, n);
+    render(n);
+  };
   if (from === undefined || reduceMotion.matches || from === target) {
-    el.textContent = fmt(target);
+    show(target);
     return;
   }
   const start = performance.now();
   const duration = 900;
   /** @param {number} now */
   const frame = (now) => {
-    const t = Math.min(1, (now - start) / duration);
+    const t = reduceMotion.matches ? 1 : Math.min(1, (now - start) / duration);
     const eased = 1 - Math.pow(1 - t, 3);
-    el.textContent = fmt(from + (target - from) * eased);
-    if (t < 1) requestAnimationFrame(frame);
+    show(from + (target - from) * eased);
+    if (t < 1) numberFrames.set(el, requestAnimationFrame(frame));
+    else numberFrames.delete(el);
   };
-  requestAnimationFrame(frame);
+  numberFrames.set(el, requestAnimationFrame(frame));
 }
 
 /* ------------------------------------------------------------------ */
@@ -173,27 +185,28 @@ function applyLinks(coin) {
   const chart = coin.chartUrl;
   if (buy) document.querySelectorAll("a[data-buy-link]").forEach((a) => a.setAttribute("href", buy));
   if (chart) document.querySelectorAll("a[data-chart-link]").forEach((a) => a.setAttribute("href", chart));
-  if (coin.x) {
-    const follow = byId("x-follow");
-    follow.setAttribute("href", coin.x);
-    follow.textContent = "Follow $OOPS on X";
-  }
+  const follow = byId("x-follow");
+  follow.setAttribute("href", coin.x || "https://x.com/search?q=%24OOPS%20EXPERIMENTAL%20ERROR&src=typed_query");
+  follow.textContent = coin.x ? "Follow $OOPS on X" : "Find $OOPS on X";
+  const existingTelegram = document.getElementById("telegram-follow");
   if (coin.telegram) {
-    const tg = document.createElement("a");
+    const tg = /** @type {HTMLAnchorElement} */ (existingTelegram || document.createElement("a"));
+    tg.id = "telegram-follow";
     tg.className = "btn btn-ghost";
     tg.href = coin.telegram;
     tg.target = "_blank";
     tg.rel = "noopener";
     tg.textContent = "Join the Telegram";
     byId("share-row").appendChild(tg);
-  }
+  } else existingTelegram?.remove();
 }
 
 /** @param {CoinData | null} coin */
 function renderStats(coin) {
   const m = coin?.market || null;
   const status = byId("stats-status");
-  renderPrice(byId("stat-price"), m?.priceUsd);
+  const price = byId("stat-price");
+  animateNumber(price, m?.priceUsd, formatPrice, "see chart", (n) => renderPrice(price, n));
   const priceFoot = byId("stat-price-foot");
   priceFoot.textContent = typeof m?.priceUsd === "number" ? `${formatPrice(m.priceUsd)} per $OOPS` : "USD per $OOPS";
   animateNumber(byId("stat-mcap"), m?.marketCap, formatUsd, "see chart");
@@ -220,9 +233,15 @@ function renderTokenomics(coin) {
   const legend = byId("legend");
   const facts = byId("token-facts");
   const supplyEl = byId("donut-supply");
-  const chart = coin?.chartUrl || "https://dexscreener.com/solana/" + CONTRACT;
+  const wrap = byId("tokenomics-layout");
+  const fallback = byId("tokenomics-fallback");
+  const chart = coin?.chartUrl || document.querySelector("[data-chart-link]")?.getAttribute("href") || "https://dexscreener.com/solana/" + CONTRACT;
   legend.replaceChildren();
   facts.replaceChildren();
+  donut.querySelectorAll(".donut-segment").forEach((segment) => segment.remove());
+  const unavailable = !t || !Array.isArray(t.allocation) || t.allocation.length === 0;
+  wrap.hidden = unavailable;
+  fallback.hidden = !unavailable;
 
   /** @param {string} term @param {string | HTMLElement} desc */
   const addFact = (term, desc) => {
@@ -248,13 +267,9 @@ function renderTokenomics(coin) {
 
   if (!t || !Array.isArray(t.allocation) || t.allocation.length === 0) {
     // No tokenomics in the feed: never block, point at the chart instead.
-    const wrap = byId("tokenomics-layout");
-    const note = document.createElement("div");
-    note.className = "card";
     const p = document.createElement("p");
     p.append("Supply and holders: ", chartLink("see the chart on DexScreener"), ".");
-    note.appendChild(p);
-    wrap.replaceChildren(note);
+    fallback.replaceChildren(p);
     return;
   }
 
@@ -268,6 +283,7 @@ function renderTokenomics(coin) {
     const pct = Math.max(0, Math.min(100, Number(slice.percent) || 0));
     const len = (pct / 100) * circ;
     const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    c.classList.add("donut-segment");
     c.setAttribute("cx", "110");
     c.setAttribute("cy", "110");
     c.setAttribute("r", String(r));
@@ -583,10 +599,13 @@ async function copyText(text, status, okMessage) {
     await navigator.clipboard.writeText(text);
     status.textContent = okMessage;
   } catch {
-    // Clipboard API blocked (insecure context or permission): select the text instead.
-    status.textContent = "Copy blocked by the browser. Select the address and copy it manually.";
+    // Keep the requested value visible beside its control when copying is blocked.
+    const value = document.createElement("code");
+    value.className = "copy-fallback";
+    value.textContent = text;
+    status.replaceChildren("Copy blocked by the browser. Select and copy this text manually: ", value);
     const range = document.createRange();
-    range.selectNodeContents(byId("contract-address"));
+    range.selectNodeContents(value);
     const sel = window.getSelection();
     sel?.removeAllRanges();
     sel?.addRange(range);
@@ -632,29 +651,81 @@ function esc(s) {
 }
 
 /**
- * Impact-style caption with an ink outline, wrapped onto up to two lines.
+ * Measure and fit the complete caption, including unbroken words, in its band.
+ * The same SVG geometry is used for the preview and the PNG export.
  * @param {string} text @param {number} y @param {number} size @param {string} fill
  */
 function caption(text, y, size, fill = "#f4f1e8") {
   const words = text.trim().toUpperCase().split(/\s+/).filter(Boolean);
   if (words.length === 0) return "";
+
+  // SVG text measurement keeps the on-page rendering entirely CSS/SVG. Use the
+  // loaded display face (or its actual fallback), rather than a character count.
+  const probe = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  probe.setAttribute("aria-hidden", "true");
+  probe.style.cssText = "position:fixed;width:0;height:0;overflow:hidden;visibility:hidden;pointer-events:none";
+  const measure = document.createElementNS("http://www.w3.org/2000/svg", "text");
+  measure.setAttribute("font-family", FONT_DISPLAY);
+  probe.appendChild(measure);
+  document.body.appendChild(probe);
+
+  const minY = y < 600 ? 24 : y > 1120 ? 1080 : 1030;
+  const maxY = y < 600 ? 230 : 1176;
   /** @type {string[]} */
-  const lines = [];
-  let line = "";
-  const maxChars = Math.max(10, Math.floor(1100 / (size * 0.62)));
-  for (const w of words) {
-    if ((line + " " + w).trim().length > maxChars && line) {
-      lines.push(line);
-      line = w;
-    } else line = (line + " " + w).trim();
+  let lines = [];
+  let advance = 0;
+  let top = 0;
+  let bottom = 0;
+  let stroke = 0;
+  try {
+    for (; size >= 12; size -= 1) {
+      measure.setAttribute("font-size", String(size));
+      stroke = Math.max(1, Math.round(size / 9));
+      /** @param {string} value */
+      const fits = (value) => {
+        measure.textContent = value;
+        return measure.getComputedTextLength() + stroke <= 1100;
+      };
+      lines = [];
+      let line = "";
+      for (const word of words) {
+        if (line && fits(`${line} ${word}`)) {
+          line += ` ${word}`;
+          continue;
+        }
+        if (line) lines.push(line);
+        line = "";
+        // A word may itself be wider than the frame; keep every character.
+        for (const character of word) {
+          if (line && !fits(line + character)) {
+            lines.push(line);
+            line = "";
+          }
+          line += character;
+        }
+      }
+      if (line) lines.push(line);
+      const bounds = lines.map((value) => {
+        measure.textContent = value;
+        return measure.getBBox();
+      });
+      top = Math.min(...bounds.map((b) => b.y));
+      bottom = Math.max(...bounds.map((b) => b.y + b.height));
+      advance = Math.max(size * 1.15, bottom - top + stroke);
+      if (bottom - top + stroke + (lines.length - 1) * advance <= maxY - minY) break;
+    }
+  } finally {
+    probe.remove();
   }
-  if (line) lines.push(line);
-  const trimmed = lines.slice(0, 2);
-  const startY = y - ((trimmed.length - 1) * size * 1.05) / 2;
-  return trimmed
+
+  const startY = Math.max(minY - top + stroke / 2, Math.min(
+    y - ((lines.length - 1) * advance) / 2,
+    maxY - bottom - stroke / 2 - (lines.length - 1) * advance,
+  ));
+  return lines
     .map(
       (l, i) =>
-        `<text x="600" y="${startY + i * size * 1.05}" text-anchor="middle" font-family="${FONT_DISPLAY}" font-size="${size}" fill="${fill}" stroke="#0a0a0a" stroke-width="${Math.round(size / 9)}" paint-order="stroke" stroke-linejoin="round">${esc(l)}</text>`,
+        `<text x="600" y="${startY + i * advance}" text-anchor="middle" font-family="${FONT_DISPLAY}" font-size="${size}" fill="${fill}" stroke="#0a0a0a" stroke-width="${stroke}" paint-order="stroke" stroke-linejoin="round">${esc(l)}</text>`,
     )
     .join("");
 }
@@ -744,7 +815,7 @@ const TEMPLATES = [
       <rect x="0" y="0" width="600" height="1200" fill="#c8ff3a"/>
       <line x1="600" y1="0" x2="600" y2="1200" stroke="#0a0a0a" stroke-width="14"/>
       ${logoImg(logo, 90, 280, 700)}
-      ${logoImg(logo, 520, 280, 700, 'transform="translate(1200 0) scale(-1 1)"')}
+      ${logoImg(logo, 90, 280, 700, 'transform="translate(1200 0) scale(-1 1)"')}
       <text x="300" y="1060" text-anchor="middle" font-family="${FONT_MONO}" font-size="40" font-weight="700" fill="#0a0a0a">REVIEWER 1</text>
       <text x="900" y="1060" text-anchor="middle" font-family="${FONT_MONO}" font-size="40" font-weight="700" fill="#0a0a0a">REVIEWER 2</text>
       ${caption(top, 130, 90, "#0a0a0a")}${caption(bottom, 1140, 70, "#f4f1e8")}`,
@@ -881,6 +952,9 @@ function initMemeWall() {
     const frame = document.createElement("div");
     frame.className = "meme-frame";
     frame.innerHTML = memeSvg(tpl, top, bottom, LOGO_SRC, title);
+    document.fonts.ready.then(() => {
+      frame.innerHTML = memeSvg(tpl, top, bottom, LOGO_SRC, title);
+    });
     const cap = document.createElement("figcaption");
     const name = document.createElement("span");
     name.textContent = tpl.title;
@@ -893,6 +967,7 @@ function initMemeWall() {
       btn.disabled = true;
       try {
         const logo = await getLogoDataUrl();
+        await document.fonts.ready;
         const svg = await withEmbeddedFonts(memeSvg(tpl, top, bottom, logo, title));
         await downloadSvgAsPng(svg, `oops-${tpl.id}.png`);
         status.textContent = "";
@@ -948,6 +1023,7 @@ function initGenerator() {
   topInput.addEventListener("input", render);
   bottomInput.addEventListener("input", render);
   render();
+  document.fonts.ready.then(render);
 
   byId("randomize-meme").addEventListener("click", () => {
     const [t, b] = SHUFFLE_LINES[Math.floor(Math.random() * SHUFFLE_LINES.length)];
@@ -962,6 +1038,7 @@ function initGenerator() {
     status.textContent = "Rendering PNG…";
     try {
       const logo = await getLogoDataUrl();
+      await document.fonts.ready;
       const svg = await withEmbeddedFonts(memeSvg(current, topInput.value, bottomInput.value, logo, "OOPS meme"));
       await downloadSvgAsPng(svg, `oops-meme-${current.id}.png`);
       status.textContent = "PNG downloaded.";
@@ -1014,6 +1091,15 @@ function initConfetti() {
 /* Boot                                                                */
 /* ------------------------------------------------------------------ */
 
+/** Apply every feed-driven surface on both first load and later polls.
+ * @param {CoinData | null} coin
+ */
+function renderCoin(coin) {
+  if (coin) applyLinks(coin);
+  renderStats(coin);
+  renderTokenomics(coin);
+}
+
 async function boot() {
   initMenu();
   initSteps();
@@ -1026,15 +1112,11 @@ async function boot() {
   initGenerator();
   initReveals();
 
-  const first = await loadCoin();
-  if (first) applyLinks(first);
-  renderStats(first);
-  renderTokenomics(first);
+  renderCoin(await loadCoin());
 
   window.setInterval(async () => {
     if (document.hidden) return;
-    const next = await loadCoin();
-    if (next) renderStats(next);
+    renderCoin(await loadCoin());
   }, REFRESH_MS);
 }
 

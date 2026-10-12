@@ -20,17 +20,20 @@ Identity.md swarm on si-md.xyz. Not financial advice.
 | `DESIGN.md` | Design documentation of the implemented tokens, typography, components and responsive behaviour. |
 | `artifacts/validation.md` | Worker validation record: commands run, browser checks, Better Interface review, findings, limitations. |
 | `artifacts/screenshots/` | Browser evidence from the final export. |
+| `test/revision.mjs` | Repeatable Chromium regression checks for the reported defects and affected interactions. |
+| `.imd-responses.json` | Verdict and reproduction/fix details for every revision finding. |
 
 ## Install
 
 Requires Node 20 or newer (built with Node 24, npm 11).
 
 ```bash
-npm install
+npm ci
 ```
 
-Dependencies are development-only: Vite (bundles `site/` into `dist/`) and TypeScript (type-checks
-the JavaScript through JSDoc annotations). The site itself has zero runtime dependencies.
+Dependencies are development-only: Vite (bundles `site/` into `dist/`), TypeScript (type-checks
+the JavaScript through JSDoc annotations), and Playwright (interaction checks). The site itself
+has zero runtime dependencies. Dependencies and browser downloads are not part of the export.
 
 ## Preview
 
@@ -83,22 +86,43 @@ private key. The data feed path `/simd-coin.json` is provided by the host origin
 
 ## Validation summary
 
-Commands run on the final source (full record in `artifacts/validation.md`):
+Revision validation, 2026-10-12 (full record in `artifacts/validation.md`):
 
 | Check | Command | Result |
 | --- | --- | --- |
 | Typecheck | `npm run typecheck` | passed, no errors |
 | Production build | `npm run build` | passed, `dist/` written |
-| Export integrity | `node test/scratch/check-dist.mjs` (meta tags, relative asset URLs, alt text, footer line, contract, no wallet libs or trackers) | all checks passed |
-| Browser | Playwright-driven Chromium against the served `dist/` at 320, 390 and 1440 CSS px | no console errors, no failed resources, no horizontal overflow; interactions exercised |
+| Browser regressions | `npm run check` (runs `test/revision.mjs`, serves `dist/` under `/preview/`) | 8 groups passed, 0 failed |
+| Responsive navigation | Chromium at 320, 360, 375, 390, 768, 1152, 1153, 1180, 1248, 1249, 1280, 1440 and 1920 CSS px | no horizontal overflow; brand/actions fit; menu and Escape work |
+| Export integrity | Relative assets served under `/preview/`, both pages loaded; title/meta/favicon, image and anchor checks | passed; healthy-feed pages had no failed resources or uncaught page errors |
 
-Interactions exercised in the browser: live stats loaded from the feed, mobile menu open/close and
-anchor navigation under the sticky nav, how-to-buy tabs, copy contract address, experiment button
-(OOPS counter, vibe meter, fact, confetti), meme generator PNG export (1200 × 1200 PNG verified),
-meme wall PNG export, keyboard focus walk (skip link, visible focus ring), reduced-motion emulation,
-404 page.
+Run the checks after rebuilding:
+
+```bash
+npx playwright install chromium   # once, outside the production export
+npm run check
+```
+
+`OOPS_CHROMIUM=/path/to/chrome npm run check` uses an existing Chromium binary.
+`OOPS_SITE_DIR=site npm run check` checks the source without a build.
+`OOPS_SCREENSHOTS=artifacts/screenshots npm run check` also saves browser evidence.
+The check manages its own temporary HTTP server and closes the browser/server when done. It uses
+the committed feed as a deterministic fixture, injects failures and calls the actual poll callback
+without waiting 30 seconds. Clipboard and X-intent tests simulate browser APIs; they send no posts.
+
+The revision reproduced all seven findings before fixing them. Checks cover initial feed failure,
+recovery, successful refreshes, later failure, changing URLs, null tokenomics, duplicate segments,
+animated price/market cap/volume, reduced motion, correct clipboard fallbacks, all eight generator
+templates with long captions and 1200 × 1200 PNG downloads, Peer review wall export, menu/anchor
+navigation, keyboard tabs, lab counter/fact/meter, share intents, metadata, resources and 404.
+
+To respect the repository's dependency-directory restriction during this run, installation,
+typecheck and build ran in an isolated `/tmp/oops-revision-tools` copy with the same manifest,
+lockfile and source. Its export was copied to `dist/`, then the regression check ran directly
+against that repository export. No dependency/cache directories or npm archives were added here.
 
 Known limitations: no real screen-reader session, no physical device test, no native 200% zoom
-check, external X/pump.fun/DexScreener destinations opened but not audited. The feed exposes no X
-or Telegram link for this coin, so the community section links to an X search for the ticker and
-offers share intents instead of claiming an official account.
+check, and Chromium only. External X/pump.fun/DexScreener services were not audited or transacted
+with in this revision. The local feed snapshot and existing fallback policy are unchanged; local
+checks do not certify hosted market-data freshness. The feed exposes no X or Telegram account,
+so the community section links to an X search and offers share intents.
