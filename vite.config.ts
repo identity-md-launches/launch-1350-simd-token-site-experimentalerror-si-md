@@ -10,7 +10,7 @@ const outDir = resolve(__dirname, "dist");
  * site/assets and are referenced relatively. Vite hashes nothing here: assets
  * keep their file names so the same relative paths work in site/ and dist/,
  * and the few files not referenced from HTML/CSS (og image, apple icon, the
- * live-data snapshot) are copied verbatim.
+ * live-data snapshot and DexScreener header) are copied verbatim.
  */
 function copyRuntimeAssets(): Plugin {
   return {
@@ -18,6 +18,7 @@ function copyRuntimeAssets(): Plugin {
     closeBundle() {
       mkdirSync(resolve(outDir, "assets"), { recursive: true });
       cpSync(resolve(root, "assets"), resolve(outDir, "assets"), { recursive: true });
+      cpSync(resolve(root, "dex-header.png"), resolve(outDir, "dex-header.png"));
       const coin = resolve(root, "simd-coin.json");
       if (existsSync(coin)) cpSync(coin, resolve(outDir, "simd-coin.json"));
     },

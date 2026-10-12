@@ -58,7 +58,7 @@ from CSS values in Chromium): chalk text on page bg 13.56:1; muted text on page 
 display sizes ≥ 20px bold, where 3:1 applies); ink on lime 16.8:1; ink on pink 6.6:1; ink on chalk
 17.53:1; lime focus ring on page bg 13:1. The ring sits 3px outside the control, so it is judged
 against the surrounding background, never against a lime fill. These are solid-color ratios,
-not measurements of every composited grain/gradient pixel. The revision rechecked lime on the
+not measurements of every composited grain/gradient pixel. The previous revision rechecked lime on the
 contract card (10.62:1) and ink on the primary fill (16.80:1); see `artifacts/validation.md` for
 scoped coverage and limitations.
 
@@ -199,6 +199,14 @@ All in `site/styles.css`; behaviour in `site/app.js`.
   provides `x`), three share buttons opening prefilled X intents, copy-link button, status line.
 - **Footer `.site-footer`**: link list and the required attribution line.
 - **404 `.lost`**: logo, `h1`, one line, primary button back home (`site/404.html`).
+- **DexScreener header**: `site/dex-header.png`, copied unchanged to `dist/dex-header.png`.
+  The fixed 1500 × 500 artboard is rendered by `scripts/render-dex-header.mjs` using the actual
+  `site/styles.css` tokens, local Lilita One face and existing `logo.webp`. The logo occupies the
+  left side; the name is stacked on the right in chalk and lime, with a tilted pink `$OOPS`
+  sticker. The chalkboard background retains the site's halftone/grain, with decorative orbital
+  scribbles. There is no small text. Display sizes 106px, 174px and 98px belong to this export
+  artboard, not the six-size responsive UI scale. The banner is a static asset, not an extra
+  page or a new interactive component. Its full composition was visually inspected at 1500 × 500.
 
 Loading/empty states: stat values start as "—" and show "see chart" when a number is null; the
 status line reports the last update time or a feed failure; tokenomics has the no-data card

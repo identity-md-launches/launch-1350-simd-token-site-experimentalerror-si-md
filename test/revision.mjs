@@ -85,6 +85,19 @@ async function png(page, button) {
 }
 
 try {
+  await check('DexScreener header is a complete 1500 × 500 PNG served unchanged from the source', async () => {
+    const source = await readFile(resolve('site/dex-header.png'));
+    const exported = await readFile(resolve(site, 'dex-header.png'));
+    assert.deepEqual(exported, source);
+    assert.equal(exported.subarray(0, 8).toString('hex'), '89504e470d0a1a0a');
+    assert.equal(exported.readUInt32BE(16), 1500);
+    assert.equal(exported.readUInt32BE(20), 500);
+    const response = await fetch(`${url}dex-header.png`);
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('content-type'), 'image/png');
+    assert.deepEqual(Buffer.from(await response.arrayBuffer()), source);
+  });
+
   await check('navigation fits through both sides of the breakpoint; mobile first action', async () => {
     const { page, context, errors } = await open();
     for (const width of [320, 360, 375, 390, 768, 1152, 1153, 1180, 1248, 1249, 1280, 1440, 1920]) {
